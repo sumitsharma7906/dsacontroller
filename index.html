@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA AI Pro Tracker</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0f172a; color: #f8fafc; padding: 30px; display: flex; flex-direction: column; align-items: center; }
+        h1 { margin-bottom: 20px; color: #38bdf8; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.3); }
+        .container { width: 100%; max-width: 800px; background: #1e293b; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin-bottom: 30px; }
+        .form-group { display: flex; gap: 15px; margin-bottom: 15px; }
+        input { flex: 1; padding: 12px; background: #334155; border: 1px solid #475569; border-radius: 6px; color: white; font-size: 16px; outline: none; transition: 0.3s; }
+        input:focus { border-color: #38bdf8; box-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
+        button { padding: 12px 24px; background: #0ea5e9; border: none; border-radius: 6px; color: white; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
+        button:hover { background: #0284c7; transform: translateY(-2px); }
+        .task-card { background: #334155; border-left: 5px solid #38bdf8; padding: 20px; border-radius: 8px; margin-top: 15px; animation: fadeIn 0.5s ease-in-out; }
+        .task-header { display: flex; justify-content: space-between; font-weight: bold; color: #38bdf8; margin-bottom: 10px; border-bottom: 1px solid #475569; padding-bottom: 5px; }
+        .complexity { display: flex; gap: 15px; margin-top: 10px; font-size: 14px; font-weight: bold; }
+        .badge { background: #1e293b; padding: 4px 10px; border-radius: 4px; color: #f43f5e; border: 1px solid #f43f5e; }
+        .badge.space { color: #10b981; border-color: #10b981; }
+        .history-title { width: 100%; max-width: 800px; margin-bottom: 15px; color: #94a3b8; font-size: 18px; border-bottom: 2px solid #334155; padding-bottom: 5px; }
+        #historyList { width: 100%; max-width: 800px; display: flex; flex-direction: column; gap: 15px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <h1>🧠 DSA AI Pro Tracker</h1>
+
+    <div class="container">
+        <div class="form-group">
+            <input type="text" id="problemName" placeholder="Enter DSA Problem Name (e.g., 0/1 Knapsack)">
+            <input type="text" id="topic" placeholder="Enter Topic (e.g., Dynamic Programming)">
+            <button onclick="askAI()">Ask AI ✨</button>
+        </div>
+        <div id="loading" style="display: none; color: #e2e8f0; font-style: italic;">🔄 Wait karo bhai, Gemini AI dimaag chala raha hai...</div>
+        <div id="currentOutput"></div>
+    </div>
+
+    <div class="history-title">🕒 Saved History Tracker (Direct from database.json)</div>
+    <div id="historyList"></div>
+
+    <script>
+        const BACKEND_URL = "http://127.0.0.1:5000";
+
+        // 1. Fetch and Load All History on Page Load
+        async function loadHistory() {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/all-tasks`);
+                const data = await res.json();
+                const historyList = document.getElementById('historyList');
+                historyList.innerHTML = "";
+
+                if (data.tasks && data.tasks.length > 0) {
+                    // Reverse isliye kiya taaki naya task hamesha top par dikhe
+                    data.tasks.reverse().forEach(task => {
+                        historyList.innerHTML += createTaskCard(task);
+                    });
+                } else {
+                    historyList.innerHTML = "<p style='color: #64748b;'>Abhi tak koi task save nahi hua hai bhai! Check it out.</p>";
+                }
+            } catch (err) {
+                console.error("History fetch error:", err);
+            }
+        }
+
+        // 2. Trigger Gemini AI Analysis and Save
+        async function askAI() {
+            const problemName = document.getElementById('problemName').value;
+            const topic = document.getElementById('topic').value;
+            const loading = document.getElementById('loading');
+            const currentOutput = document.getElementById('currentOutput');
+
+            if (!problemName || !topic) {
+                alert("🚨 Oye bhai! Problem Name aur Topic dono bharna zaroori hai!");
+                return;
+            }
+
+            loading.style.display = "block";
+            currentOutput.innerHTML = "";
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/recommend-approach`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ problemName, topic })
+                });
+
+                const data = await res.json();
+                loading.style.display = "none";
+
+                if (data.success) {
+                    // Output rendering
+                    currentOutput.innerHTML = `
+                        <div style="color: #10b981; font-weight: bold; margin-bottom: 10px;">✅ Permanent Database Me Save Ho Gaya!</div>
+                        ${createTaskCard(data.currentTask)}
+                    `;
+                    // Inputs ko clear kar do
+                    document.getElementById('problemName').value = "";
+                    document.getElementById('topic').value = "";
+                    
+                    // History update karo automatic
+                    loadHistory();
+                } else {
+                    currentOutput.innerHTML = `<div style="color: #ef4444;">🚨 Error: ${data.message}</div>`;
+                }
+            } catch (err) {
+                loading.style.display = "none";
+                currentOutput.innerHTML = `<div style="color: #ef4444;">🚨 Server connect nahi ho paa raha hai bhai!</div>`;
+            }
+        }
+
+        // Helper function to generate dynamic task cards
+        function createTaskCard(task) {
+            return `
+                <div class="task-card">
+                    <div class="task-header">
+                        <span>📝 ${task.problemName}</span>
+                        <span style="color: #94a3b8; font-size: 14px;">🏷️ ${task.topic}</span>
+                    </div>
+                    <p style="color: #cbd5e1; line-height: 1.5;">${task.suggestedApproach}</p>
+                    <div class="complexity">
+                        <span class="badge">⌛ Time: ${task.timeComplexity}</span>
+                        <span class="badge space">📦 Space: ${task.spaceComplexity}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Load history automatically when browser opens the page
+        loadHistory();
+    </script>
+</body>
+</html>
